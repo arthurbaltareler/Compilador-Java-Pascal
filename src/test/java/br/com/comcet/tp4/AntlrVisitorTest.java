@@ -21,6 +21,14 @@ public class AntlrVisitorTest {
         return visitor.visit(tree);
     }
 
+    // Retorna o primeiro comando que não é VarDeclCommand
+    private Command firstRealCommand(Program p) {
+        return p.commands().stream()
+                .filter(c -> !(c instanceof VarDeclCommand))
+                .findFirst()
+                .orElseThrow(() -> new AssertionError("Nenhum comando encontrado"));
+    }
+
     @Test
     void visitorConstroiAstParaAtribuicaoComPrecedencia() {
         String codigo = "program p; var x: integer; begin x := 10 + 5 * 2; end.";
@@ -31,9 +39,8 @@ public class AntlrVisitorTest {
 
         Program program = (Program) ast;
         assertEquals("p", program.name());
-        assertEquals(1, program.commands().size());
 
-        AssignmentCommand assign = (AssignmentCommand) program.commands().get(0);
+        AssignmentCommand assign = (AssignmentCommand) firstRealCommand(program);
         assertEquals("x", assign.id().name());
 
         BinaryExpression plus = (BinaryExpression) assign.expr();
@@ -50,7 +57,7 @@ public class AntlrVisitorTest {
         AstNode ast = parse(codigo);
 
         Program program = (Program) ast;
-        IfCommand ic = (IfCommand) program.commands().get(0);
+        IfCommand ic = (IfCommand) firstRealCommand(program);
         assertNull(ic.elseBranch());
         assertTrue(ic.thenBranch() instanceof AssignmentCommand);
     }
@@ -61,7 +68,7 @@ public class AntlrVisitorTest {
         AstNode ast = parse(codigo);
 
         Program program = (Program) ast;
-        IfCommand ic = (IfCommand) program.commands().get(0);
+        IfCommand ic = (IfCommand) firstRealCommand(program);
         assertNotNull(ic.elseBranch());
     }
 
@@ -71,7 +78,7 @@ public class AntlrVisitorTest {
         AstNode ast = parse(codigo);
 
         Program program = (Program) ast;
-        assertTrue(program.commands().get(0) instanceof WhileCommand);
+        assertTrue(firstRealCommand(program) instanceof WhileCommand);
     }
 
     @Test
@@ -80,7 +87,7 @@ public class AntlrVisitorTest {
         AstNode ast = parse(codigo);
 
         Program program = (Program) ast;
-        assertTrue(program.commands().get(0) instanceof WritelnCommand);
+        assertTrue(firstRealCommand(program) instanceof WritelnCommand);
     }
 
     @Test
@@ -89,7 +96,7 @@ public class AntlrVisitorTest {
         AstNode ast = parse(codigo);
 
         Program program = (Program) ast;
-        AssignmentCommand assign = (AssignmentCommand) program.commands().get(0);
+        AssignmentCommand assign = (AssignmentCommand) firstRealCommand(program);
 
         BinaryExpression mult = (BinaryExpression) assign.expr();
         assertEquals("*", mult.operator());

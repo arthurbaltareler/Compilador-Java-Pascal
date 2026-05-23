@@ -51,7 +51,6 @@ public class App {
 
     public static void exibirEstatisticas(String text) {
 
-        // TODO: Implementar a lógica de estatísticas aqui
         if (text == null || text.trim().isEmpty()) {
             System.out.println("Texto vazio.");
             return;

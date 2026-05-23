@@ -6,17 +6,32 @@ import br.com.comcet.tp4.parser.MiniPascalParser;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.stream.Collectors;
 
 public class MyVisitor extends MiniPascalBaseVisitor<AstNode> {
 
     @Override
     public AstNode visitProgram(MiniPascalParser.ProgramContext ctx) {
         List<Command> commands = new ArrayList<>();
-        if (ctx.block() != null) {
+
+        if (ctx.varDecl() != null) {
+            List<MiniPascalParser.IdListContext> idLists = ctx.varDecl().idList();
+            List<MiniPascalParser.TypeContext> types = ctx.varDecl().type();
+            for (int i = 0; i < idLists.size(); i++) {
+                List<String> names = idLists.get(i).ID().stream()
+                        .map(id -> id.getText())
+                        .collect(Collectors.toList());
+                String typeName = types.get(i).getText();
+                commands.add(new VarDeclCommand(names, typeName));
+            }
+        }
+
+        if (ctx.block() != null && ctx.block().commandList() != null) {
             for (MiniPascalParser.CommandContext cmdCtx : ctx.block().commandList().command()) {
                 commands.add((Command) visit(cmdCtx));
             }
         }
+
         return new Program(ctx.ID().getText(), commands);
     }
 
