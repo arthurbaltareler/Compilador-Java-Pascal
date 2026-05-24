@@ -45,7 +45,8 @@ public class SemanticScopeTest {
 
     @Test
     void falhaDuplaDeclaracaoMesmoEscopo() {
-        String codigo = "program p; var x: integer; var x: integer; begin x := 1; end.";
+        // Na gramática, dupla declaração é: var x, x: integer;
+        String codigo = "program p; var x, x: integer; begin x := 1; end.";
         AstNode ast = parse(codigo);
         SemanticAnalyzer sem = new SemanticAnalyzer();
         sem.analyze(ast);
@@ -57,7 +58,7 @@ public class SemanticScopeTest {
 
     @Test
     void passaCodigoCorreto() {
-        String codigo = "program p; var x: integer; var y: integer; begin x := 10; y := x + 1; end.";
+        String codigo = "program p; var x, y: integer; begin x := 10; y := x + 1; end.";
         AstNode ast = parse(codigo);
         SemanticAnalyzer sem = new SemanticAnalyzer();
         sem.analyze(ast);
