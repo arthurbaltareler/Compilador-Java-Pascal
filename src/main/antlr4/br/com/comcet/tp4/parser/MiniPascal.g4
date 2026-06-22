@@ -3,11 +3,32 @@ grammar MiniPascal;
 // ── Regras do Parser ────────────────────────────────────────────────────────
 
 program
-    : 'program' ID ';' varDecl? block '.' EOF
+    : 'program' ID ';' varDecl? subDecl* block '.' EOF
     ;
 
 varDecl
     : 'var' (idList ':' type ';')+
+    ;
+
+subDecl
+    : functionDecl
+    | procedureDecl
+    ;
+
+functionDecl
+    : 'function' ID '(' paramList? ')' ':' type ';' varDecl? block ';'
+    ;
+
+procedureDecl
+    : 'procedure' ID '(' paramList? ')' ';' varDecl? block ';'
+    ;
+
+paramList
+    : param (';' param)*
+    ;
+
+param
+    : idList ':' type
     ;
 
 idList
@@ -35,6 +56,7 @@ command
     | repeatCommand
     | writeCommand
     | readCommand
+    | procedureCall
     | block
     ;
 
@@ -62,22 +84,31 @@ readCommand
     : 'readln' '(' ID ')' ';'
     ;
 
+procedureCall
+    : ID '(' argList? ')' ';'
+    ;
+
+argList
+    : expression (',' expression)*
+    ;
+
 // ── Expressões com precedência ───────────────────────────────────────────────
 
 expression
-     : 'not' expression                                                    # notExpr
-     | '-' expression                                                      # unaryExpr
-     | expression op=('*' | '/') expression                               # mulExpr
-     | expression op=('+' | '-') expression                               # addExpr
-     | expression op=('=' | '<>' | '<' | '>' | '<=' | '>=') expression   # relationalExpr
-     | expression op=('and' | 'or') expression                            # logicalExpr
-     | '(' expression ')'                                                  # parenExpr
-     | NUMBER                                                              # numberExpr
-     | STRING_LITERAL                                                      # stringExpr
-     | 'true'                                                              # trueExpr
-     | 'false'                                                             # falseExpr
-     | ID                                                                  # idExpr
-     ;
+    : 'not' expression                                                    # notExpr
+    | '-' expression                                                      # unaryExpr
+    | expression op=('*' | '/') expression                               # mulExpr
+    | expression op=('+' | '-') expression                               # addExpr
+    | expression op=('=' | '<>' | '<' | '>' | '<=' | '>=') expression   # relationalExpr
+    | expression op=('and' | 'or') expression                            # logicalExpr
+    | '(' expression ')'                                                  # parenExpr
+    | ID '(' argList? ')'                                                 # functionCallExpr
+    | NUMBER                                                              # numberExpr
+    | STRING_LITERAL                                                      # stringExpr
+    | 'true'                                                              # trueExpr
+    | 'false'                                                             # falseExpr
+    | ID                                                                  # idExpr
+    ;
 
 // ── Regras do Lexer ──────────────────────────────────────────────────────────
 
