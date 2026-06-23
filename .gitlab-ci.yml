@@ -1,8 +1,29 @@
 image: maven:3.9.6-eclipse-temurin-21
 
 stages:
+  - relatorios
   - build
   - test
+  - test_frontend
+
+auditoria_de_prazos:
+  stage: relatorios
+  before_script:
+    - apt-get update -y && apt-get install git -y || true
+  script:
+    - echo "=== Relatório de Auditoria de Prazos (Git History) ==="
+    - echo "Etapa 1 (Prazo: 23/03):"
+    - git log --before="2026-03-23T23:59:59" -n 1 --format="%cd - %s" || echo "Sem commits antes do prazo!"
+    - echo "Etapa 2 (Prazo: 30/03):"
+    - git log --before="2026-03-30T23:59:59" -n 1 --format="%cd - %s" || echo "Sem commits antes do prazo!"
+    - echo "Etapa 3 (Prazo: 13/04):"
+    - git log --before="2026-04-13T23:59:59" -n 1 --format="%cd - %s" || echo "Sem commits antes do prazo!"
+    - echo "Etapa 4 (Prazo: 04/05):"
+    - git log --before="2026-05-04T23:59:59" -n 1 --format="%cd - %s" || echo "Sem commits antes do prazo!"
+    - echo "Etapa 5 (Prazo: 24/05):"
+    - git log --before="2026-05-24T23:59:59" -n 1 --format="%cd - %s" || echo "Sem commits antes do prazo!"
+    - echo "Etapa 6 (Prazo: 23/06):"
+    - git log --before="2026-06-23T23:59:59" -n 1 --format="%cd - %s" || echo "Sem commits antes do prazo!"
 
 build_job:
   stage: build
@@ -13,3 +34,9 @@ test_job:
   stage: test
   script:
     - mvn test
+
+validacao_etapas1a5:
+  stage: test_frontend
+  script:
+    - echo "Compilando e rodando os testes de Front-end (Léxico, Sintático e Semântico)..."
+    - mvn clean test -Dtest=FrontendSmokeTest
