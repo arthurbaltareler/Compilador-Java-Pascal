@@ -6,12 +6,19 @@ import br.com.comcet.tp1.ast.*;
 import br.com.comcet.tp5.ScopedSymbolTable;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 public class TypeChecker {
 
     private final ScopedSymbolTable table = new ScopedSymbolTable();
     private final List<String> errors = new ArrayList<>();
+
+    // Guarda a assinatura das funções/procedimentos: nome -> lista de tipos dos parâmetros
+    private final Map<String, List<Type>> paramTypes = new HashMap<>();
+    // Guarda o tipo de retorno das funções (procedimentos não têm)
+    private final Map<String, Type> returnTypes = new HashMap<>();
 
     // ── Ponto de entrada ────────────────────────────────────────────────────
 
@@ -24,15 +31,79 @@ public class TypeChecker {
     public boolean hasErrors() { return !errors.isEmpty(); }
     public List<String> getErrors() { return errors; }
 
-    // ── Programa e Comandos ──────────────────────────────────────────────────
+    // ── Programa ──────────────────────────────────────────────────────────────
 
     private void checkProgram(Program program) {
         table.enterScope();
+
+        // Registra assinaturas de todas as sub-rotinas primeiro
+        for (AstNode sub : program.subDecls()) {
+            registerSignature(sub);
+        }
+
+        // Verifica o corpo de cada sub-rotina
+        for (AstNode sub : program.subDecls()) {
+            checkSubDecl(sub);
+        }
+
+        // Verifica o bloco principal
         for (Command cmd : program.commands()) {
             checkCommand(cmd);
         }
+
         table.exitScope();
     }
+
+    private void registerSignature(AstNode sub) {
+        if (sub instanceof FunctionDecl) {
+            FunctionDecl fd = (FunctionDecl) sub;
+            List<Type> types = new ArrayList<>();
+            for (Param p : fd.params()) types.add(Type.fromText(p.typeName()));
+            paramTypes.put(fd.name(), types);
+            returnTypes.put(fd.name(), Type.fromText(fd.returnType()));
+            table.add(fd.name(), new Symbol(fd.name(), fd.returnType(), null));
+        } else if (sub instanceof ProcedureDecl) {
+            ProcedureDecl pd = (ProcedureDecl) sub;
+            List<Type> types = new ArrayList<>();
+            for (Param p : pd.params()) types.add(Type.fromText(p.typeName()));
+            paramTypes.put(pd.name(), types);
+            table.add(pd.name(), new Symbol(pd.name(), "procedure", null));
+        }
+    }
+
+    private void checkSubDecl(AstNode sub) {
+        List<Param> params;
+        List<VarDeclCommand> localVars;
+        BlockCommand body;
+
+        if (sub instanceof FunctionDecl) {
+            FunctionDecl fd = (FunctionDecl) sub;
+            params = fd.params();
+            localVars = fd.localVars();
+            body = fd.body();
+        } else {
+            ProcedureDecl pd = (ProcedureDecl) sub;
+            params = pd.params();
+            localVars = pd.localVars();
+            body = pd.body();
+        }
+
+        table.enterScope();
+
+        for (Param p : params) {
+            table.add(p.name(), new Symbol(p.name(), p.typeName(), null));
+        }
+        for (VarDeclCommand vd : localVars) {
+            checkVarDecl(vd);
+        }
+        for (Command cmd : body.commands()) {
+            checkCommand(cmd);
+        }
+
+        table.exitScope();
+    }
+
+    // ── Comandos ──────────────────────────────────────────────────────────────
 
     private void checkCommand(Command cmd) {
         if (cmd instanceof VarDeclCommand) {
@@ -49,8 +120,13 @@ public class TypeChecker {
             checkBlock((BlockCommand) cmd);
         } else if (cmd instanceof WritelnCommand) {
             checkExpression(((WritelnCommand) cmd).expr());
+        } else if (cmd instanceof ProcedureCallCommand) {
+            checkProcedureCall((ProcedureCallCommand) cmd);
         }
-        // ReadlnCommand não exige checagem de tipo de expressão
+    }
+
+    private void checkProcedureCall(ProcedureCallCommand cmd) {
+        checkCallArguments(cmd.name(), cmd.args());
     }
 
     private void checkVarDecl(VarDeclCommand cmd) {
@@ -58,7 +134,6 @@ public class TypeChecker {
             if (!table.existsInCurrentScope(name)) {
                 table.add(name, new Symbol(name, cmd.typeName(), null));
             }
-            // Duplicidade já é validada na Etapa 5
         }
     }
 
@@ -74,14 +149,8 @@ public class TypeChecker {
 
         Type varType = Type.fromText(symbol.type());
 
-        if (varType == exprType) {
-            return; // tipos idênticos — ok
-        }
-
-        // Promoção permitida: integer -> real (preparado para quando houver literais reais)
-        if (varType == Type.REAL && exprType == Type.INTEGER) {
-            return;
-        }
+        if (varType == exprType) return;
+        if (varType == Type.REAL && exprType == Type.INTEGER) return;
 
         errors.add("Erro Semântico: não é possível atribuir " + exprType +
                 " à variável '" + varName + "' do tipo " + varType + ".");
@@ -93,9 +162,7 @@ public class TypeChecker {
             errors.add("Erro Semântico: condição do 'if' deve ser booleana.");
         }
         checkCommand(cmd.thenBranch());
-        if (cmd.elseBranch() != null) {
-            checkCommand(cmd.elseBranch());
-        }
+        if (cmd.elseBranch() != null) checkCommand(cmd.elseBranch());
     }
 
     private void checkWhile(WhileCommand cmd) {
@@ -116,13 +183,11 @@ public class TypeChecker {
 
     private void checkBlock(BlockCommand cmd) {
         table.enterScope();
-        for (Command c : cmd.commands()) {
-            checkCommand(c);
-        }
+        for (Command c : cmd.commands()) checkCommand(c);
         table.exitScope();
     }
 
-    // ── Expressões (bottom-up: folhas primeiro, depois os pais) ─────────────
+    // ── Expressões ────────────────────────────────────────────────────────────
 
     private Type checkExpression(Expression expr) {
         Type result;
@@ -137,6 +202,8 @@ public class TypeChecker {
             result = checkUnaryExpression((UnaryExpression) expr);
         } else if (expr instanceof CastExpr) {
             result = ((CastExpr) expr).toType();
+        } else if (expr instanceof FunctionCallExpression) {
+            result = checkFunctionCall((FunctionCallExpression) expr);
         } else {
             result = Type.ERROR;
         }
@@ -145,15 +212,49 @@ public class TypeChecker {
         return result;
     }
 
+    private Type checkFunctionCall(FunctionCallExpression call) {
+        checkCallArguments(call.name(), call.args());
+        Type returnType = returnTypes.get(call.name());
+        return returnType != null ? returnType : Type.ERROR;
+    }
+
+    // Valida quantidade e tipos dos argumentos contra a assinatura registrada
+    private void checkCallArguments(String name, List<Expression> args) {
+        List<Type> expected = paramTypes.get(name);
+
+        if (expected == null) {
+            errors.add("Erro Semântico: função ou procedimento '" + name + "' não declarado.");
+            // Ainda assim, verifica os argumentos para não esconder outros erros
+            for (Expression arg : args) checkExpression(arg);
+            return;
+        }
+
+        if (expected.size() != args.size()) {
+            errors.add("Erro Semântico: '" + name + "' espera " + expected.size() +
+                    " argumento(s), mas recebeu " + args.size() + ".");
+        }
+
+        int n = Math.min(expected.size(), args.size());
+        for (int i = 0; i < n; i++) {
+            Type argType = checkExpression(args.get(i));
+            Type paramType = expected.get(i);
+            boolean compatible = argType == paramType
+                    || (paramType == Type.REAL && argType == Type.INTEGER);
+            if (!compatible) {
+                errors.add("Erro Semântico: argumento " + (i + 1) + " de '" + name +
+                        "' espera " + paramType + ", mas recebeu " + argType + ".");
+            }
+        }
+
+        // Garante que todos os argumentos restantes (se houver excesso) sejam validados
+        for (int i = n; i < args.size(); i++) checkExpression(args.get(i));
+    }
+
     private Type inferLiteralType(Literal lit) {
         String v = lit.value();
-        if (v.equals("true") || v.equals("false")) {
-            return Type.BOOLEAN;
-        }
-        if (v.matches("[0-9]+")) {
-            return Type.INTEGER;
-        }
-        return Type.STRING; // sobra: strings entre aspas simples já sem as aspas
+        if (v.equals("true") || v.equals("false")) return Type.BOOLEAN;
+        if (v.matches("[0-9]+")) return Type.INTEGER;
+        return Type.STRING;
     }
 
     private Type checkIdentifier(Identifier id) {
@@ -166,19 +267,15 @@ public class TypeChecker {
     }
 
     private Type checkBinaryExpression(BinaryExpression bin) {
-        Type left  = checkExpression(bin.left());
+        Type left = checkExpression(bin.left());
         Type right = checkExpression(bin.right());
-        String op  = bin.operator();
+        String op = bin.operator();
 
         if (isArithmetic(op)) {
-            if (left == Type.INTEGER && right == Type.INTEGER) {
-                return Type.INTEGER;
-            }
+            if (left == Type.INTEGER && right == Type.INTEGER) return Type.INTEGER;
             boolean numeric = (left == Type.INTEGER || left == Type.REAL)
                     && (right == Type.INTEGER || right == Type.REAL);
-            if (numeric && (left == Type.REAL || right == Type.REAL)) {
-                return Type.REAL; // promoção
-            }
+            if (numeric && (left == Type.REAL || right == Type.REAL)) return Type.REAL;
             errors.add("Erro Semântico: Operação '" + op +
                     "' não suportada para tipos " + left + " e " + right + ".");
             return Type.ERROR;
@@ -189,18 +286,14 @@ public class TypeChecker {
                     && (right == Type.INTEGER || right == Type.REAL);
             boolean boolPair = left == Type.BOOLEAN && right == Type.BOOLEAN
                     && (op.equals("=") || op.equals("<>"));
-            if (numericPair || boolPair) {
-                return Type.BOOLEAN;
-            }
+            if (numericPair || boolPair) return Type.BOOLEAN;
             errors.add("Erro Semântico: Operação '" + op +
                     "' não suportada para tipos " + left + " e " + right + ".");
             return Type.ERROR;
         }
 
         if (isLogical(op)) {
-            if (left == Type.BOOLEAN && right == Type.BOOLEAN) {
-                return Type.BOOLEAN;
-            }
+            if (left == Type.BOOLEAN && right == Type.BOOLEAN) return Type.BOOLEAN;
             errors.add("Erro Semântico: operador lógico '" + op +
                     "' exige operandos booleanos.");
             return Type.ERROR;
@@ -213,17 +306,13 @@ public class TypeChecker {
         Type operandType = checkExpression(un.operand());
 
         if (un.operator().equals("-")) {
-            if (operandType == Type.INTEGER || operandType == Type.REAL) {
-                return operandType;
-            }
+            if (operandType == Type.INTEGER || operandType == Type.REAL) return operandType;
             errors.add("Erro Semântico: operador unário '-' exige operando numérico.");
             return Type.ERROR;
         }
 
         if (un.operator().equalsIgnoreCase("not")) {
-            if (operandType == Type.BOOLEAN) {
-                return Type.BOOLEAN;
-            }
+            if (operandType == Type.BOOLEAN) return Type.BOOLEAN;
             errors.add("Erro Semântico: operador 'not' exige operando booleano.");
             return Type.ERROR;
         }

@@ -77,4 +77,43 @@ public class SemanticScopeTest {
         assertTrue(sem.getErrors().stream()
                 .anyMatch(e -> e.contains("nao declarada")));
     }
+
+    @Test
+    void passaChamadaFuncaoDeclarada() {
+        String codigo = "program p; var x: integer; "
+                + "function dobro(n: integer): integer; "
+                + "begin dobro := n * 2; end; "
+                + "begin x := dobro(5); end.";
+        AstNode ast = parse(codigo);
+        SemanticAnalyzer sem = new SemanticAnalyzer();
+        sem.analyze(ast);
+
+        assertFalse(sem.hasErrors());
+    }
+
+    @Test
+    void falhaChamadaFuncaoNaoDeclarada() {
+        String codigo = "program p; var x: integer; begin x := dobro(5); end.";
+        AstNode ast = parse(codigo);
+        SemanticAnalyzer sem = new SemanticAnalyzer();
+        sem.analyze(ast);
+
+        assertTrue(sem.hasErrors());
+        assertTrue(sem.getErrors().stream()
+                .anyMatch(e -> e.contains("nao declarad")));
+    }
+
+    @Test
+    void passaVariavelLocalSombreiaGlobal() {
+        String codigo = "program p; var x: integer; "
+                + "procedure teste(); "
+                + "var x: integer; "
+                + "begin x := 10; end; "
+                + "begin x := 1; teste(); end.";
+        AstNode ast = parse(codigo);
+        SemanticAnalyzer sem = new SemanticAnalyzer();
+        sem.analyze(ast);
+
+        assertFalse(sem.hasErrors());
+    }
 }

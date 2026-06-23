@@ -72,7 +72,7 @@ public class TypeCheckerTest {
 
     @Test
     void passaComparacaoEntreInteiros() {
-        String codigo = "program p; var x, y: integer; var flag: boolean; "
+        String codigo = "program p; var x, y: integer; flag: boolean; "
                 + "begin x := 10; y := 20; flag := x < y; end.";
         AstNode ast = parse(codigo);
 
@@ -84,7 +84,7 @@ public class TypeCheckerTest {
 
     @Test
     void falhaOperadorLogicoComInteiros() {
-        String codigo = "program p; var x: integer; var flag: boolean; "
+        String codigo = "program p; var x: integer; flag: boolean; "
                 + "begin flag := x and 1; end.";
         AstNode ast = parse(codigo);
 
@@ -92,5 +92,58 @@ public class TypeCheckerTest {
         tc.check(ast);
 
         assertTrue(tc.hasErrors());
+    }
+
+    @Test
+    void falhaChamadaFuncaoArgumentosIncompativeis() {
+        String codigo = "program p; var x: integer; "
+                + "function dobro(n: integer): integer; "
+                + "begin dobro := n * 2; end; "
+                + "begin x := dobro(true); end.";
+        AstNode ast = parse(codigo);
+
+        TypeChecker tc = new TypeChecker();
+        tc.check(ast);
+
+        assertTrue(tc.hasErrors());
+    }
+
+    @Test
+    void falhaChamadaFuncaoQuantidadeArgumentosErrada() {
+        String codigo = "program p; var x: integer; "
+                + "function soma(a: integer; b: integer): integer; "
+                + "begin soma := a + b; end; "
+                + "begin x := soma(5); end.";
+        AstNode ast = parse(codigo);
+
+        TypeChecker tc = new TypeChecker();
+        tc.check(ast);
+
+        assertTrue(tc.hasErrors());
+        assertTrue(tc.getErrors().stream().anyMatch(e -> e.contains("espera")));
+    }
+
+    @Test
+    void passaProgramaComFuncaoValida() {
+        String codigo = "program p; var x: integer; "
+                + "function fatorial(n: integer): integer; "
+                + "var resultado, i: integer; "
+                + "begin "
+                + "  resultado := 1; "
+                + "  i := 1; "
+                + "  while i <= n do "
+                + "  begin "
+                + "    resultado := resultado * i; "
+                + "    i := i + 1; "
+                + "  end "                          // sem ';' aqui!
+                + "  fatorial := resultado; "
+                + "end; "
+                + "begin x := fatorial(5); end.";
+        AstNode ast = parse(codigo);
+
+        TypeChecker tc = new TypeChecker();
+        tc.check(ast);
+
+        assertFalse(tc.hasErrors());
     }
 }
